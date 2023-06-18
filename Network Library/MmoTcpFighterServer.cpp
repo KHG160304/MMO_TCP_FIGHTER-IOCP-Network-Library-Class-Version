@@ -48,29 +48,54 @@ void MmoTcpFighterServer::Monitoring()
 	DWORD endMeasurementTime = timeGetTime();
 	DWORD interval = endMeasurementTime - startMeasurementTime;
 	static int printCnt = 0;
-	_int64 printRecvPacketCntPerSec;
-	_int64 printSendPacketCntPerSec;
+	uint64_t printRecvIOCntPerSec;
+	uint64_t printSendIOCntPerSec;
+	uint64_t printRecvPacketBytesPerSec;
+	uint64_t printSendPacketBytesPerSec;
+
+	uint64_t printRecvPacketBytesPerOneIO = 0;
+	uint64_t printSendPacketBytesPerOneIO = 0;
 	if (interval >= 1000)
 	{
-		printRecvPacketCntPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorCompleteRecvIOCnt, 0);
-		printSendPacketCntPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorCompleteSendIOCnt, 0);
+		printRecvPacketBytesPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorRecvPacketBytes, 0);
+		printSendPacketBytesPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorSendPacketBytes, 0);
+		printRecvIOCntPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorCompleteRecvIOCnt, 0);
+		printSendIOCntPerSec = InterlockedExchange((ULONG64*)&mServerEngine.monitorCompleteSendIOCnt, 0);
 		if (printCnt == 11)
 		{
+			if (printRecvIOCntPerSec != 0)
+			{
+				printRecvPacketBytesPerOneIO = printRecvPacketBytesPerSec / printRecvIOCntPerSec;
+			}
+			if (printSendIOCntPerSec != 0)
+			{
+				printSendPacketBytesPerOneIO = printSendPacketBytesPerSec / printSendIOCntPerSec;
+			}
+
 			printCnt = 0;
 			_Log(dfLOG_LEVEL_SYSTEM,
 				"\n-----------------------------------------------\n"
 				"Accept Threads Count: %d\n"
 				"IOCPWorker Threads Count: %d\n"
 				"-----------------------------------------------\n"
-				"FPS: %lld, Loop/sec: %lld\n"
-				"Recv Packet/sec: %lld\n"
-				"Send Packet/sec: %lld\n"
+				"FPS: %lld\n"
+				"Loop/sec: %lld\n"
+				"-----------------------------------------------\n"
+				"Complete Recv IO/sec: %lld\n"
+				"Complete Send IO/sec: %lld\n"
+				"Recv Packet Size/sec: %lld\n"
+				"Send Packet Size/sec: %lld\n"
+				"Avr. One Recv IO Packet Size: %lld\n"
+				"Avr. One Send IO Packet Size: %lld\n"
 				"-----------------------------------------------\n"
 				"Session Count: %lld\n"
 				"Character Count: %lld\n"
 				"Sector Character Count: %lld\n\n"
 				, mServerEngine.GetAcceptThreadsCnt(), mServerEngine.GetIOCPWorkerThreadsCnt()
-				, mMonitorFrameCnt, mMonitorLoopCnt, printRecvPacketCntPerSec, printSendPacketCntPerSec
+				, mMonitorFrameCnt, mMonitorLoopCnt
+				, printRecvIOCntPerSec, printSendIOCntPerSec
+				, printRecvPacketBytesPerSec, printSendPacketBytesPerSec
+				, printRecvPacketBytesPerOneIO, printSendPacketBytesPerOneIO
 				, mServerEngine.GetSessionCnt(), mCharacterManager.GetCharacterCnt(), mSectorManager.GetSectorCharacterCnt());
 		}
 
@@ -108,9 +133,9 @@ void MmoTcpFighterServer::OnAccept(SESSIONID sessionID)
 
 	TcpFighterMessage::ConvertPacketCreateMyCharaterToCreateOtherCharacter(sendPacket);
 	AcquireSRWLockExclusive(mCharacterManager.GetCharacterContainerLock());
-	SendPacketByAcceptEvent(characInfo, sendPacket);
 	mCharacterManager.AddCharacter(sessionID, characInfo);
 	mSectorManager.Sector_AddCharacter(characInfo);
+	SendPacketByAcceptEvent(characInfo, sendPacket);	
 	ReleaseSRWLockExclusive(mCharacterManager.GetCharacterContainerLock());
 }
 
