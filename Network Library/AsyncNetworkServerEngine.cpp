@@ -353,6 +353,8 @@ uint32_t WINAPI AsyncNetworkServerEngine::IOCPWorkerThread(AsyncNetworkServerEng
 
 	uint64_t* ptrMonitorCompleteRecvIOCnt = &ptrServerEngine->monitorCompleteRecvIOCnt;
 	uint64_t* ptrMonitorCompleteSendIOCnt = &ptrServerEngine->monitorCompleteSendIOCnt;
+	uint64_t* ptrMonitorRecvPacketBytes = &ptrServerEngine->monitorRecvPacketBytes;
+	uint64_t* ptrMonitorSendPacketBytes = &ptrServerEngine->monitorSendPacketBytes;
 	for (;;)
 	{
 		numberOfBytesTransferred = 0;
@@ -378,8 +380,8 @@ uint32_t WINAPI AsyncNetworkServerEngine::IOCPWorkerThread(AsyncNetworkServerEng
 				goto FIN_COMPLETION_IO_PROCESS;
 			}
 
+			InterlockedExchangeAdd64((LONG64*)ptrMonitorRecvPacketBytes, numberOfBytesTransferred);
 			InterlockedIncrement(ptrMonitorCompleteRecvIOCnt);
-
 			ptrRecvRingBuffer = &ptrSession->recvRingBuffer;
 			ptrRecvRingBuffer->MoveRear(numberOfBytesTransferred);
 			for (;;)
@@ -408,8 +410,8 @@ uint32_t WINAPI AsyncNetworkServerEngine::IOCPWorkerThread(AsyncNetworkServerEng
 		}
 		else if (&ptrSession->sendOverlapped == overlapped && numberOfBytesTransferred != FAILED_SEND_PACKET)
 		{
+			InterlockedExchangeAdd64((LONG64*)ptrMonitorSendPacketBytes, numberOfBytesTransferred);
 			InterlockedIncrement(ptrMonitorCompleteSendIOCnt);
-
 			ptrSendRingBuffer = &ptrSession->sendRingBuffer;
 			ptrSession->sendRingBuffer.MoveFront(numberOfBytesTransferred);
 			// InterLocked 함수 호출로 인해서, MoveFront의 결과가 확실하게

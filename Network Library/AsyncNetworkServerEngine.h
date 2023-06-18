@@ -80,6 +80,9 @@ public:
 	uint64_t monitorSessionCnt;
 	uint64_t monitorCompleteRecvIOCnt;
 	uint64_t monitorCompleteSendIOCnt;
+
+	uint64_t monitorRecvPacketBytes;
+	uint64_t monitorSendPacketBytes;
 };
 
 #endif // !__NETWORK_SERVER_ENGINE__
