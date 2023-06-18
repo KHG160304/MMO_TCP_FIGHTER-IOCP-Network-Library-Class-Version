@@ -54,7 +54,8 @@ constexpr int FAILED_SEND_PACKET = -5;
 constexpr SESSIONID INVALID_SESSION_ID = -1;
 
 AsyncNetworkServerEngine::AsyncNetworkServerEngine(uint16_t port, ISessionEventHandler* handler
-	, uint32_t numberOfCreateIOCPWorkerThreads, uint32_t numberOfConcurrentIOCPWorkerThreads)
+	, uint32_t numberOfCreateIOCPWorkerThreads, uint32_t numberOfConcurrentIOCPWorkerThreads
+	, uint32_t sessionRecvBufferSize, uint32_t sessionSendBufferSize)
 	: mPort(port)
 	, mWstrIPv4Addr{ 0 }
 	, mIpv4AddrStrLen(0)
@@ -63,8 +64,8 @@ AsyncNetworkServerEngine::AsyncNetworkServerEngine(uint16_t port, ISessionEventH
 	, mNumberOfCreateAcceptThreads(1)
 	, mNumberOfCreateIOCPWorkerThreads(numberOfCreateIOCPWorkerThreads)
 	, mNumberOfConcurrentIOCPWorkerThreads(numberOfConcurrentIOCPWorkerThreads)
-	, mSessionRecvBufferSize(1024 * 512)
-	, mSessionSendBufferSize(1024 * 1024)
+	, mSessionRecvBufferSize(sessionRecvBufferSize)
+	, mSessionSendBufferSize(sessionSendBufferSize)
 	, mPtrSessionEventHandler(handler)
 	, mhIOCP(INVALID_HANDLE_VALUE)
 	, mhThreadAccept(INVALID_HANDLE_VALUE)
@@ -75,15 +76,16 @@ AsyncNetworkServerEngine::AsyncNetworkServerEngine(uint16_t port, ISessionEventH
 }
 
 AsyncNetworkServerEngine::AsyncNetworkServerEngine(uint16_t port, const wchar_t wstrIPv4Addr[17], ISessionEventHandler* handler
-	, uint32_t numberOfCreateIOCPWorkerThreads, uint32_t numberOfConcurrentIOCPWorkerThreads)
+	, uint32_t numberOfCreateIOCPWorkerThreads, uint32_t numberOfConcurrentIOCPWorkerThreads
+	, uint32_t sessionRecvBufferSize, uint32_t sessionSendBufferSize)
 	: mPort(port)
 	, mListenSock(INVALID_SOCKET)
 	, mServerAddr{ 0 }
 	, mNumberOfCreateAcceptThreads(1)
 	, mNumberOfCreateIOCPWorkerThreads(numberOfCreateIOCPWorkerThreads)
 	, mNumberOfConcurrentIOCPWorkerThreads(numberOfConcurrentIOCPWorkerThreads)
-	, mSessionRecvBufferSize(1024 * 1024)
-	, mSessionSendBufferSize(1024 * 1024)
+	, mSessionRecvBufferSize(sessionRecvBufferSize)
+	, mSessionSendBufferSize(sessionSendBufferSize)
 	, mPtrSessionEventHandler(handler)
 	, mhIOCP(INVALID_HANDLE_VALUE)
 	, mhThreadAccept(INVALID_HANDLE_VALUE)

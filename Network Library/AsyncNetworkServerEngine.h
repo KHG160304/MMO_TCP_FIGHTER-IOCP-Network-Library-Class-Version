@@ -11,14 +11,17 @@ typedef struct Session Session, *PSession;
 
 // null 터미네이터 포함x
 constexpr int IPv4_MAX_STR_LEN = 16;
+constexpr uint32_t DEFAULT_SESSION_BUFFER_SIZE = 4096;
 
 class AsyncNetworkServerEngine
 {
 public:
 	AsyncNetworkServerEngine(uint16_t port, ISessionEventHandler* handler
-		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0);
+		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
+		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
 	AsyncNetworkServerEngine(uint16_t port, const wchar_t wstrIPv4Addr[17], ISessionEventHandler* handler
-		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0);
+		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
+		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
 
 	~AsyncNetworkServerEngine();
 	void Start();
