@@ -176,20 +176,22 @@ void AsyncNetworkServerEngine::ReleaseAllSession()
 
 void AsyncNetworkServerEngine::Start()
 {
+	timeBeginPeriod(1);
 	_wsetlocale(LC_ALL, L"korean");
+
 	if (!OpenServerPort())
 	{
+		timeEndPeriod(1);
 		_Log(dfLOG_LEVEL_SYSTEM, L"Server Start failed - Port Open failed");
 		return;
 	}
 
 	if (!InitNetworkIOThread())
 	{
+		timeEndPeriod(1);
 		_Log(dfLOG_LEVEL_SYSTEM, L"Server Start failed - Init Network IOThread faild");
 		return;
 	}
-
-	timeBeginPeriod(1);
 }
 
 bool AsyncNetworkServerEngine::OpenServerPort()
