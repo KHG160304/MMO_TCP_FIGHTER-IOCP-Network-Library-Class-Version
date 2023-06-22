@@ -316,6 +316,7 @@ bool AsyncNetworkServerEngine::InitNetworkIOThread()
 			delete[] mhArrThreadIOCPWorker;
 			return false;
 		}
+		SetThreadPriority(this->mhArrThreadIOCPWorker[idx], THREAD_PRIORITY_TIME_CRITICAL);
 	}
 
 	mhThreadAccept = (HANDLE)_beginthreadex(nullptr, 0, (_beginthreadex_proc_type)AsyncNetworkServerEngine::AcceptThread, this, 0, nullptr);

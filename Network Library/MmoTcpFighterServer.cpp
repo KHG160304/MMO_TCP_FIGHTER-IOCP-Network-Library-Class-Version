@@ -9,7 +9,7 @@ static const wchar_t* dirTable[8] = { L"LL", L"LU", L"UU", L"RU", L"RR", L"RD", 
 
 MmoTcpFighterServer::MmoTcpFighterServer(uint16_t port)
 	: mhThreadUpdate(0)
-	, mServerEngine(port, this, 1, 1)
+	, mServerEngine(port, this, 6, 6)
 	, mIsUpdateThreadRunning(true)
 	, mMonitorLoopCnt(0)
 	, mMonitorFrameCnt(0)
@@ -173,7 +173,7 @@ bool MmoTcpFighterServer::InitTCPFighterContentThread()
 		_Log(dfLOG_LEVEL_SYSTEM, "Update Thread Create Error code %d", GetLastError());
 		return false;
 	}
-
+	SetThreadPriority(mhThreadUpdate, THREAD_PRIORITY_IDLE);
 	return true;
 }
 
@@ -200,11 +200,13 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 		intervalTime = endTime - startTime;
 		if (intervalTime < INTERVAL_FPS(25))
 		{
+			Sleep(0);
 			continue;
 		}
 		startTime = endTime - (intervalTime - INTERVAL_FPS(25));
 		++(*ptrMonitorFrameCnt);
 
+		Sleep(23000);
 		CharacterInfo* ptrCharac;
 		AcquireSRWLockShared(ptrCharacterManager->GetCharacterContainerLock());
 		std::unordered_map<SESSIONID, PCharacterInfo> characterList 
@@ -990,6 +992,13 @@ bool MmoTcpFighterServer::ProcessPacketAttack3(SESSIONID sessionID, Serializatio
 	CharacterInfo* damagedCharacter;
 	if (SearchCollisionOnSectors(dfATTACK3_RANGE_X, dfATTACK3_RANGE_Y, ptrCharacter, &damagedCharacter))
 	{
+		Sleep(60000);
+		int aaa = 3000;
+		while (aaa--)
+		{
+			YieldProcessor();
+		}
+		Sleep(60000);
 		packetBuf.ClearBuffer();
 		TcpFighterMessage::MakePacketDamage(packetBuf, ptrCharacter->characterID, damagedCharacter->characterID, damagedCharacter->hp -= dfATTACK3_DAMAGE);
 		SendPacketToSectorAround(damagedCharacter, packetBuf, true);
