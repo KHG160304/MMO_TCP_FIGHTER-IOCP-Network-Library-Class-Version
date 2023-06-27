@@ -17,11 +17,15 @@ class AsyncNetworkServerEngine
 {
 public:
 	AsyncNetworkServerEngine(uint16_t port, ISessionEventHandler* handler
-		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
-		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
+		, uint32_t numberOfCreateIOCPWorkerThreads = 0
+		, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
+		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE
+		, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
 	AsyncNetworkServerEngine(uint16_t port, const wchar_t wstrIPv4Addr[17], ISessionEventHandler* handler
-		, uint32_t numberOfCreateIOCPWorkerThreads = 0, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
-		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
+		, uint32_t numberOfCreateIOCPWorkerThreads = 0
+		, uint32_t numberOfConcurrentIOCPWorkerThreads = 0
+		, uint32_t sessionRecvBufferSize = DEFAULT_SESSION_BUFFER_SIZE
+		, uint32_t sessionSendBufferSize = DEFAULT_SESSION_BUFFER_SIZE);
 
 	~AsyncNetworkServerEngine();
 	void Start();
@@ -77,6 +81,8 @@ private:
 	SRWLOCK	mSessionMapSRWLock;
 
 public:
+	static constexpr SESSIONID INVALID_SESSION_ID = -1;
+
 	uint64_t monitorSessionCnt;
 	uint64_t monitorCompleteRecvIOCnt;
 	uint64_t monitorCompleteSendIOCnt;
@@ -85,4 +91,5 @@ public:
 	uint64_t monitorSendPacketBytes;
 };
 
+typedef AsyncNetworkServerEngine ServerEngin;
 #endif // !__NETWORK_SERVER_ENGINE__

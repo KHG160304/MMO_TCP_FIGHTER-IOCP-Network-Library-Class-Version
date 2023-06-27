@@ -51,7 +51,6 @@ struct Session
 };
 
 constexpr int FAILED_SEND_PACKET = -5;
-constexpr SESSIONID INVALID_SESSION_ID = -1;
 
 AsyncNetworkServerEngine::AsyncNetworkServerEngine(uint16_t port, ISessionEventHandler* handler
 	, uint32_t numberOfCreateIOCPWorkerThreads, uint32_t numberOfConcurrentIOCPWorkerThreads
