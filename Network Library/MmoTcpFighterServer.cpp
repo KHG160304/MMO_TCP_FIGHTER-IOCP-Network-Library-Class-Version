@@ -173,7 +173,6 @@ bool MmoTcpFighterServer::InitTCPFighterContentThread()
 		_Log(dfLOG_LEVEL_SYSTEM, "Update Thread Create Error code %d", GetLastError());
 		return false;
 	}
-	//SetThreadPriority(mhThreadUpdate, THREAD_PRIORITY_IDLE);
 	return true;
 }
 
@@ -199,14 +198,12 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 		intervalTime = endTime - startTime;
 		if (intervalTime < INTERVAL_FPS(25))
 		{
-			//Sleep(0);
 			continue;
 		}
 		startTime = endTime - (intervalTime - INTERVAL_FPS(25));
 		++(*ptrMonitorFrameCnt);
 
-		CharacterInfo* ptrCharac;
-		//Sleep(23000);
+		PCharacterInfo ptrCharac;
 		AcquireSRWLockShared(ptrCharacterManager->GetCharacterContainerLock());
 		std::unordered_map<SESSIONID, PCharacterInfo> characterList 
 			= ptrCharacterManager->GetCharacterContainer();
@@ -303,7 +300,6 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 			ReleaseSRWLockExclusive(&ptrCharac->srwCharacterLock);
 		}
 		ReleaseSRWLockShared(ptrCharacterManager->GetCharacterContainerLock());
-		//Sleep(0);
 	}
 
 	_Log(dfLOG_LEVEL_SYSTEM, "UpdateThread 종료");
@@ -314,10 +310,10 @@ void MmoTcpFighterServer::SendPacketToSector(SectorPos target, const Serializati
 {
 	if (excludeCharacterID != INVALID_CHARACTER_ID)
 	{
-		CharacterInfo* ptrCharac;
+		PCharacterInfo ptrCharac;
 		AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
-		std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
-		std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
+		std::unordered_map<CHARACTERID, PCharacterInfo> characterList = mSectorManager.GetCharacterListOnSector(target);
+		std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = characterList.cbegin();
 		for (; iter != characterList.cend(); ++iter)
 		{
 			ptrCharac = iter->second;
@@ -331,8 +327,8 @@ void MmoTcpFighterServer::SendPacketToSector(SectorPos target, const Serializati
 	}
 
 	AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
-	std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
-	std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
+	std::unordered_map<CHARACTERID, PCharacterInfo> characterList = mSectorManager.GetCharacterListOnSector(target);
+	std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = characterList.cbegin();
 	for (; iter != characterList.cend(); ++iter)
 	{
 		mServerEngine.SendPacket(iter->second->sessionID, sendPacket);
@@ -344,10 +340,10 @@ void MmoTcpFighterServer::SendNPacketToSector(SectorPos target, const Serializat
 {
 	if (excludeCharacterID != INVALID_CHARACTER_ID)
 	{
-		CharacterInfo* ptrCharac;
+		PCharacterInfo ptrCharac;
 		AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
-		std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
-		std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
+		std::unordered_map<CHARACTERID, PCharacterInfo> characterList = mSectorManager.GetCharacterListOnSector(target);
+		std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = characterList.cbegin();
 		for (; iter != characterList.cend(); ++iter)
 		{
 			ptrCharac = iter->second;
@@ -364,8 +360,8 @@ void MmoTcpFighterServer::SendNPacketToSector(SectorPos target, const Serializat
 	}
 
 	AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
-	std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
-	std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
+	std::unordered_map<CHARACTERID, PCharacterInfo> characterList = mSectorManager.GetCharacterListOnSector(target);
+	std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = characterList.cbegin();
 	for (; iter != characterList.cend(); ++iter)
 	{
 		for (int i = 0; i < numberOfPacket; ++i)
@@ -417,9 +413,9 @@ void MmoTcpFighterServer::SendPacketByAcceptEvent(PCharacterInfo ptrCharac, cons
 	for (idxSectors = 0; idxSectors < sendTargetSectors.cnt; ++idxSectors)
 	{
 		AcquireSRWLockShared(mSectorManager.GetLockOnSector(sendTargetSectors.around[idxSectors]));
-		std::unordered_map<CHARACTERID, CharacterInfo*>& characterList 
+		std::unordered_map<CHARACTERID, PCharacterInfo>& characterList
 			= mSectorManager.GetCharacterListOnSector(sendTargetSectors.around[idxSectors]);
-		std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
+		std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = characterList.cbegin();
 		for (; iter != characterList.cend(); ++iter)
 		{
 			ptrOtherCharac = iter->second;
@@ -548,7 +544,7 @@ void MmoTcpFighterServer::SendPacketBySectorUpdate(PCharacterInfo ptrCharac)
 	}
 }
 
-bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackYRange, const CharacterInfo* characterOnAttack, SESSIONID* outSessionIdForCharacterOnDamage)//, CharacterInfo** outCharacterIDOnDamage)
+bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackYRange, const PCharacterInfo characterOnAttack, SESSIONID* outSessionIdForCharacterOnDamage)
 {
 	PCharacterInfo charac;
 	SectorPos posOnAttacker = characterOnAttack->curPos;
@@ -932,7 +928,6 @@ bool MmoTcpFighterServer::ProcessPacketAttack1(SESSIONID sessionID, Serializatio
 		ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 		return true;
 	}
-	//Sleep(60000);
 	ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 	
 	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
