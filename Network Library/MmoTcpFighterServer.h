@@ -35,7 +35,7 @@ private:
 	bool ProcessPacketAttack3(SESSIONID sessionID, SerializationBuffer& refRecvPacket);
 	bool ProcessPacketEcho(SESSIONID sessionID, SerializationBuffer& refRecvPacket);
 
-	bool SearchCollisionOnSectors(int attackXRange, int attackYRange, const CharacterInfo* characterOnAttack, CharacterInfo** outCharacterIDOnDamage);
+	bool SearchCollisionOnSectors(int attackXRange, int attackYRange, const CharacterInfo* characterOnAttack, SESSIONID* outSessionIdForCharacterOnDamage);
 
 	static uint32_t WINAPI UpdateThread(MmoTcpFighterServer* ptrServerEngine);
 private:

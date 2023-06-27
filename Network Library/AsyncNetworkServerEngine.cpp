@@ -315,7 +315,7 @@ bool AsyncNetworkServerEngine::InitNetworkIOThread()
 			delete[] mhArrThreadIOCPWorker;
 			return false;
 		}
-		SetThreadPriority(this->mhArrThreadIOCPWorker[idx], THREAD_PRIORITY_TIME_CRITICAL);
+		//SetThreadPriority(this->mhArrThreadIOCPWorker[idx], THREAD_PRIORITY_TIME_CRITICAL);
 	}
 
 	mhThreadAccept = (HANDLE)_beginthreadex(nullptr, 0, (_beginthreadex_proc_type)AsyncNetworkServerEngine::AcceptThread, this, 0, nullptr);
@@ -707,7 +707,7 @@ bool AsyncNetworkServerEngine::SendPacket(SESSIONID sessionID, const Serializati
 	ptrSendRingBuffer = &ptrSession->sendRingBuffer;
 	if (ptrSendRingBuffer->GetFreeSize() < (netPacketHeader.len + sizeof(netPacketHeader)))
 	{
-		_Log(dfLOG_LEVEL_SYSTEM, "송신패킷 SendRingBuffer Enqueue 실패 크기: %lld", (netPacketHeader.len + sizeof(netPacketHeader)));
+		_Log(dfLOG_LEVEL_SYSTEM, "SendRingBuffer use size: %d 송신패킷 SendRingBuffer Enqueue 실패 크기: %lld", ptrSendRingBuffer->GetUseSize(), (netPacketHeader.len + sizeof(netPacketHeader)));
 		ReleaseSRWLockExclusive(&ptrSession->sessionSRWLock);
 		return false;
 	}

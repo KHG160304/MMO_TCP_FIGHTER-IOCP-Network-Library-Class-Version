@@ -9,7 +9,7 @@ static const wchar_t* dirTable[8] = { L"LL", L"LU", L"UU", L"RU", L"RR", L"RD", 
 
 MmoTcpFighterServer::MmoTcpFighterServer(uint16_t port)
 	: mhThreadUpdate(0)
-	, mServerEngine(port, this, 6, 6)
+	, mServerEngine(port, this)
 	, mIsUpdateThreadRunning(true)
 	, mMonitorLoopCnt(0)
 	, mMonitorFrameCnt(0)
@@ -135,7 +135,7 @@ void MmoTcpFighterServer::OnAccept(SESSIONID sessionID)
 	AcquireSRWLockExclusive(mCharacterManager.GetCharacterContainerLock());
 	mCharacterManager.AddCharacter(sessionID, characInfo);
 	mSectorManager.Sector_AddCharacter(characInfo);
-	SendPacketByAcceptEvent(characInfo, sendPacket);	
+	SendPacketByAcceptEvent(characInfo, sendPacket);
 	ReleaseSRWLockExclusive(mCharacterManager.GetCharacterContainerLock());
 }
 
@@ -173,14 +173,13 @@ bool MmoTcpFighterServer::InitTCPFighterContentThread()
 		_Log(dfLOG_LEVEL_SYSTEM, "Update Thread Create Error code %d", GetLastError());
 		return false;
 	}
-	SetThreadPriority(mhThreadUpdate, THREAD_PRIORITY_IDLE);
+	//SetThreadPriority(mhThreadUpdate, THREAD_PRIORITY_IDLE);
 	return true;
 }
 
 uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFighterServer)
 {
 	_Log(dfLOG_LEVEL_SYSTEM, "UpdateThread 시작");
-	bool isUpdate = false;
 	DWORD startTime = timeGetTime();
 	DWORD endTime;
 	DWORD intervalTime;
@@ -200,14 +199,14 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 		intervalTime = endTime - startTime;
 		if (intervalTime < INTERVAL_FPS(25))
 		{
-			Sleep(0);
+			//Sleep(0);
 			continue;
 		}
 		startTime = endTime - (intervalTime - INTERVAL_FPS(25));
 		++(*ptrMonitorFrameCnt);
 
-		Sleep(23000);
 		CharacterInfo* ptrCharac;
+		//Sleep(23000);
 		AcquireSRWLockShared(ptrCharacterManager->GetCharacterContainerLock());
 		std::unordered_map<SESSIONID, PCharacterInfo> characterList 
 			= ptrCharacterManager->GetCharacterContainer();
@@ -224,7 +223,6 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 			}
 			else if (endTime > ptrCharac->lastRecvTime && endTime - ptrCharac->lastRecvTime > dfNETWORK_PACKET_RECV_TIMEOUT)
 			{
-				
 				ptrServerEngine->Disconnect(ptrCharac->sessionID);
 			}
 			else if (ptrCharac->action != INVALID_ACTION)
@@ -289,21 +287,23 @@ uint32_t WINAPI MmoTcpFighterServer::UpdateThread(MmoTcpFighterServer* ptrTcpFig
 				}
 
 				// 섹터에 정보 업데이트
-				isUpdate = ptrSectorManager->Sector_UpdateCharacter(ptrCharac, &errSectorUpdate);
-				ReleaseSRWLockExclusive(&ptrCharac->srwCharacterLock);
-				if (isUpdate)
+				if (ptrSectorManager->Sector_UpdateCharacter(ptrCharac, &errSectorUpdate))
 				{
 					ptrTcpFighterServer->SendPacketBySectorUpdate(ptrCharac);
+					ReleaseSRWLockExclusive(&ptrCharac->srwCharacterLock);
+					continue;
 				}
 				else if (errSectorUpdate == OUT_OF_RANGE_SECTOR)
 				{
+					ReleaseSRWLockExclusive(&ptrCharac->srwCharacterLock);
 					ptrServerEngine->Disconnect(ptrCharac->sessionID);
+					continue;
 				}
-				continue;
 			}
 			ReleaseSRWLockExclusive(&ptrCharac->srwCharacterLock);
 		}
 		ReleaseSRWLockShared(ptrCharacterManager->GetCharacterContainerLock());
+		//Sleep(0);
 	}
 
 	_Log(dfLOG_LEVEL_SYSTEM, "UpdateThread 종료");
@@ -314,14 +314,16 @@ void MmoTcpFighterServer::SendPacketToSector(SectorPos target, const Serializati
 {
 	if (excludeCharacterID != INVALID_CHARACTER_ID)
 	{
+		CharacterInfo* ptrCharac;
 		AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
 		std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
 		std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
-		for (; iter != characterList.end(); ++iter)
+		for (; iter != characterList.cend(); ++iter)
 		{
-			if (excludeCharacterID != iter->first)
+			ptrCharac = iter->second;
+			if (excludeCharacterID != ptrCharac->characterID)
 			{
-				mServerEngine.SendPacket(iter->second->sessionID, sendPacket);
+				mServerEngine.SendPacket(ptrCharac->sessionID, sendPacket);
 			}
 		}
 		ReleaseSRWLockShared(mSectorManager.GetLockOnSector(target));
@@ -331,7 +333,7 @@ void MmoTcpFighterServer::SendPacketToSector(SectorPos target, const Serializati
 	AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
 	std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
 	std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
-	for (; iter != characterList.end(); ++iter)
+	for (; iter != characterList.cend(); ++iter)
 	{
 		mServerEngine.SendPacket(iter->second->sessionID, sendPacket);
 	}
@@ -342,16 +344,18 @@ void MmoTcpFighterServer::SendNPacketToSector(SectorPos target, const Serializat
 {
 	if (excludeCharacterID != INVALID_CHARACTER_ID)
 	{
+		CharacterInfo* ptrCharac;
 		AcquireSRWLockShared(mSectorManager.GetLockOnSector(target));
 		std::unordered_map<CHARACTERID, CharacterInfo*> characterList = mSectorManager.GetCharacterListOnSector(target);
 		std::unordered_map<CHARACTERID, CharacterInfo*>::const_iterator iter = characterList.cbegin();
 		for (; iter != characterList.cend(); ++iter)
 		{
-			if (excludeCharacterID != iter->first)
+			ptrCharac = iter->second;
+			if (excludeCharacterID != ptrCharac->characterID)
 			{
 				for (int i = 0; i < numberOfPacket; ++i)
 				{
-					mServerEngine.SendPacket(iter->second->sessionID, *(sendPacket[i]));
+					mServerEngine.SendPacket(ptrCharac->sessionID, *(sendPacket[i]));
 				}
 			}
 		}
@@ -398,13 +402,16 @@ void MmoTcpFighterServer::SendPacketByAcceptEvent(PCharacterInfo ptrCharac, cons
 	SerializationBuffer otherCharacInfoPacket;
 	SectorAround sendTargetSectors;
 	CharacterInfo* ptrOtherCharac;
+
+	CHARACTERID newAcceptorCharacterID = ptrCharac->characterID;
+	SESSIONID newAcceptorSessionID = ptrCharac->sessionID;
 	mSectorManager.GetSectorAround(ptrCharac->curPos, &sendTargetSectors, true);
 
 	// 내정보를 주변 섹터에 뿌린다.
 	int idxSectors;
 	for (idxSectors = 0; idxSectors < sendTargetSectors.cnt; ++idxSectors)
 	{
-		SendPacketToSector(sendTargetSectors.around[idxSectors], myCharacInfoPacket);
+		SendPacketToSector(sendTargetSectors.around[idxSectors], myCharacInfoPacket, newAcceptorCharacterID);
 	}
 
 	for (idxSectors = 0; idxSectors < sendTargetSectors.cnt; ++idxSectors)
@@ -416,14 +423,19 @@ void MmoTcpFighterServer::SendPacketByAcceptEvent(PCharacterInfo ptrCharac, cons
 		for (; iter != characterList.cend(); ++iter)
 		{
 			ptrOtherCharac = iter->second;
+			if (newAcceptorCharacterID == ptrOtherCharac->characterID)
+			{
+				continue;
+			}
+
 			AcquireSRWLockShared(&ptrOtherCharac->srwCharacterLock);
 			TcpFighterMessage::MakePacketCreateOtherCharacter(otherCharacInfoPacket, ptrOtherCharac);
-			mServerEngine.SendPacket(ptrCharac->sessionID, otherCharacInfoPacket);
+			mServerEngine.SendPacket(newAcceptorSessionID, otherCharacInfoPacket);
 			otherCharacInfoPacket.ClearBuffer();
 			if (ptrOtherCharac->action != INVALID_ACTION)
 			{
 				TcpFighterMessage::MakePacketMoveStart(otherCharacInfoPacket, ptrOtherCharac);
-				mServerEngine.SendPacket(ptrCharac->sessionID, otherCharacInfoPacket);
+				mServerEngine.SendPacket(newAcceptorSessionID, otherCharacInfoPacket);
 				otherCharacInfoPacket.ClearBuffer();
 			}
 			ReleaseSRWLockShared(&ptrOtherCharac->srwCharacterLock);
@@ -443,10 +455,12 @@ void MmoTcpFighterServer::SendPacketBySectorUpdate(PCharacterInfo ptrCharac)
 	int idxRemoveSectors;
 	int idxAddSectors;
 
+	CHARACTERID removeCharacterID;
 	CharacterInfo* addSecterCharac;
 
 	mSectorManager.GetUpdateSectorAround(ptrCharac, &removeSectors, &addSectors);
 	CHARACTERID myCharacterID = ptrCharac->characterID;
+	SESSIONID myCharacterSessionID = ptrCharac->sessionID;
 	/*
 		removeSectors에 존재하는 캐릭터들에게,
 		ptrCharac의 정보를 화면에서 지우라고 함
@@ -469,13 +483,14 @@ void MmoTcpFighterServer::SendPacketBySectorUpdate(PCharacterInfo ptrCharac)
 		std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = removeCharacterMap.cbegin();
 		for (; iter != removeCharacterMap.cend(); ++iter)
 		{
-			if (iter->first == myCharacterID)
+			removeCharacterID = iter->first;
+			if (removeCharacterID == myCharacterID)
 			{
 				continue;
 			}
 			packetBuf.ClearBuffer();
-			TcpFighterMessage::MakePacketDeleteCharacter(packetBuf, iter->first);
-			mServerEngine.SendPacket(ptrCharac->sessionID, packetBuf);
+			TcpFighterMessage::MakePacketDeleteCharacter(packetBuf, removeCharacterID);
+			mServerEngine.SendPacket(myCharacterSessionID, packetBuf);
 		}
 		ReleaseSRWLockShared(mSectorManager.GetLockOnSector(removeSectors.around[idxRemoveSectors]));
 	}
@@ -505,14 +520,15 @@ void MmoTcpFighterServer::SendPacketBySectorUpdate(PCharacterInfo ptrCharac)
 		std::unordered_map<CHARACTERID, PCharacterInfo>::const_iterator iter = addCharacterMap.cbegin();
 		for (; iter != addCharacterMap.cend(); ++iter)
 		{
-			if (iter->first == myCharacterID)
+			addSecterCharac = iter->second;
+			if (addSecterCharac->characterID == myCharacterID)
 			{
 				continue;
 			}
-			addSecterCharac = iter->second;
+			
 			packetBuf.ClearBuffer();
 			TcpFighterMessage::MakePacketCreateOtherCharacter(packetBuf, addSecterCharac);
-			mServerEngine.SendPacket(ptrCharac->sessionID, packetBuf);
+			mServerEngine.SendPacket(myCharacterSessionID, packetBuf);
 			switch (addSecterCharac->action)
 			{
 			case dfPACKET_MOVE_DIR_LL:
@@ -525,14 +541,14 @@ void MmoTcpFighterServer::SendPacketBySectorUpdate(PCharacterInfo ptrCharac)
 			case dfPACKET_MOVE_DIR_LD:
 				packetBuf2.ClearBuffer();
 				TcpFighterMessage::MakePacketMoveStart(packetBuf2, addSecterCharac);
-				mServerEngine.SendPacket(ptrCharac->sessionID, packetBuf2);
+				mServerEngine.SendPacket(myCharacterSessionID, packetBuf2);
 			}
 		}
 		ReleaseSRWLockShared(mSectorManager.GetLockOnSector(addSectors.around[idxAddSectors]));
 	}
 }
 
-bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackYRange, const CharacterInfo* characterOnAttack, CharacterInfo** outCharacterIDOnDamage)
+bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackYRange, const CharacterInfo* characterOnAttack, SESSIONID* outSessionIdForCharacterOnDamage)//, CharacterInfo** outCharacterIDOnDamage)
 {
 	PCharacterInfo charac;
 	SectorPos posOnAttacker = characterOnAttack->curPos;
@@ -548,12 +564,13 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 
 	short tmpX;
 	int cnt;
-	CharacterInfo* targetCharacter = nullptr;
+
+	SESSIONID targetCharacSessionID = ServerEngin::INVALID_SESSION_ID;
 
 	if (attackerStop2Dir == dfPACKET_MOVE_DIR_LL)
 	{
 		for (tmpX = posOnAttacker.xPos, cnt = 2; 
-			targetCharacter == nullptr && tmpX > -1 && cnt != 0; 
+			tmpX > -1 && cnt != 0; 
 			--tmpX, --cnt)
 		{
 			AcquireSRWLockShared(mSectorManager.GetLockOnSector(tmpX, posOnAttacker.yPos));
@@ -577,15 +594,15 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 					{
 						minDistanceX = tmpDistanceX;
 						minDistanceY = tmpDistanceY;
-						targetCharacter = charac;
+						targetCharacSessionID = charac->sessionID;
 					}
 				}
 			}
 			ReleaseSRWLockShared(mSectorManager.GetLockOnSector(tmpX, posOnAttacker.yPos));
 
-			if (targetCharacter != nullptr)
+			if (targetCharacSessionID != ServerEngin::INVALID_SESSION_ID)
 			{
-				*outCharacterIDOnDamage = targetCharacter;
+				*outSessionIdForCharacterOnDamage = targetCharacSessionID;
 				return true;
 			}
 		}
@@ -605,7 +622,9 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 
 		if (searchEndY != -1)
 		{
-			for (tmpX = posOnAttacker.xPos, cnt = 2; targetCharacter == nullptr && tmpX > -1 && cnt != 0; --tmpX, --cnt)
+			for (tmpX = posOnAttacker.xPos, cnt = 2;
+				tmpX > -1 && cnt != 0;
+				--tmpX, --cnt)
 			{
 				AcquireSRWLockShared(mSectorManager.GetLockOnSector(tmpX, searchEndY));
 				std::unordered_map<CHARACTERID, PCharacterInfo> characterList
@@ -628,15 +647,15 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 						{
 							minDistanceX = tmpDistanceX;
 							minDistanceY = tmpDistanceY;
-							targetCharacter = charac;
+							targetCharacSessionID = charac->sessionID;
 						}
 					}
 				}
 				ReleaseSRWLockShared(mSectorManager.GetLockOnSector(tmpX, searchEndY));
 
-				if (targetCharacter != nullptr)
+				if (targetCharacSessionID != ServerEngin::INVALID_SESSION_ID)
 				{
-					*outCharacterIDOnDamage = targetCharacter;
+					*outSessionIdForCharacterOnDamage = targetCharacSessionID;
 					return true;
 				}
 			}
@@ -646,7 +665,9 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 	}
 	else if (attackerStop2Dir == dfPACKET_MOVE_DIR_RR)
 	{
-		for (tmpX = posOnAttacker.xPos, cnt = 2; tmpX < dfWORLD_SECTOR_WIDTH && cnt != 0; ++tmpX, --cnt)
+		for (tmpX = posOnAttacker.xPos, cnt = 2;
+			tmpX < dfWORLD_SECTOR_WIDTH && cnt != 0;
+			++tmpX, --cnt)
 		{
 			AcquireSRWLockShared(mSectorManager.GetLockOnSector(tmpX, posOnAttacker.yPos));
 			std::unordered_map<CHARACTERID, PCharacterInfo> characterList
@@ -670,15 +691,15 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 					{
 						minDistanceX = tmpDistanceX;
 						minDistanceY = tmpDistanceY;
-						targetCharacter = charac;
+						targetCharacSessionID = charac->sessionID;
 					}
 				}
 			}
 			ReleaseSRWLockShared(mSectorManager.GetLockOnSector(tmpX, posOnAttacker.yPos));
 
-			if (targetCharacter != nullptr)
+			if (targetCharacSessionID != ServerEngin::INVALID_SESSION_ID)
 			{
-				*outCharacterIDOnDamage = targetCharacter;
+				*outSessionIdForCharacterOnDamage = targetCharacSessionID;
 				return true;
 			}
 		}
@@ -698,7 +719,9 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 
 		if (searchEndY != -1)
 		{
-			for (tmpX = posOnAttacker.xPos, cnt = 2; tmpX < dfWORLD_SECTOR_WIDTH && cnt != 0; ++tmpX, --cnt)
+			for (tmpX = posOnAttacker.xPos, cnt = 2;
+				tmpX < dfWORLD_SECTOR_WIDTH && cnt != 0;
+				++tmpX, --cnt)
 			{
 				AcquireSRWLockShared(mSectorManager.GetLockOnSector(tmpX, searchEndY));
 				std::unordered_map<CHARACTERID, PCharacterInfo> characterList
@@ -721,15 +744,15 @@ bool MmoTcpFighterServer::SearchCollisionOnSectors(int attackXRange, int attackY
 						{
 							minDistanceX = tmpDistanceX;
 							minDistanceY = tmpDistanceY;
-							targetCharacter = charac;
+							targetCharacSessionID = charac->sessionID;
 						}
 					}
 				}
 				ReleaseSRWLockShared(mSectorManager.GetLockOnSector(tmpX, searchEndY));
 
-				if (targetCharacter != nullptr)
+				if (targetCharacSessionID != ServerEngin::INVALID_SESSION_ID)
 				{
-					*outCharacterIDOnDamage = targetCharacter;
+					*outSessionIdForCharacterOnDamage = targetCharacSessionID;
 					return true;
 				}
 			}
@@ -869,20 +892,27 @@ bool MmoTcpFighterServer::ProcessPacketAttack1(SESSIONID sessionID, Serializatio
 	BYTE stop2Dir;
 	WORD clientXpos;
 	WORD clientYpos;
+
 	PCharacterInfo ptrCharacter;
+	CHARACTERID characterID;
+
+	PCharacterInfo ptrCharacterOnDamage;
+	SESSIONID sessionIdForCharacterOnDamage;
 
 	refRecvPacket >> stop2Dir >> clientXpos >> clientYpos;
 	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
 	mCharacterManager.FindCharacter(sessionID, &ptrCharacter);
 	AcquireSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	characterID = ptrCharacter->characterID;
+
 	if (abs(ptrCharacter->xPos - clientXpos) > dfERROR_RANGE
 		|| abs(ptrCharacter->yPos - clientYpos) > dfERROR_RANGE)
 	{
 		clientXpos = ptrCharacter->xPos;
 		clientYpos = ptrCharacter->yPos;
 
-		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, ptrCharacter->characterID, clientXpos, clientYpos);
+		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, characterID, clientXpos, clientYpos);
 		SendPacketToSectorAround(ptrCharacter, packetBuf, true);
 		packetBuf.ClearBuffer();
 	}
@@ -894,18 +924,29 @@ bool MmoTcpFighterServer::ProcessPacketAttack1(SESSIONID sessionID, Serializatio
 
 	ptrCharacter->stop2Dir = stop2Dir;
 
-	TcpFighterMessage::MakePacketAttack1(packetBuf, ptrCharacter->characterID, stop2Dir, clientXpos, clientYpos);
+	TcpFighterMessage::MakePacketAttack1(packetBuf, characterID, stop2Dir, clientXpos, clientYpos);
 	SendPacketToSectorAround(ptrCharacter, packetBuf, false);
 
-	CharacterInfo* damagedCharacter;
-	if (SearchCollisionOnSectors(dfATTACK1_RANGE_X, dfATTACK1_RANGE_Y, ptrCharacter, &damagedCharacter))
+	if (!SearchCollisionOnSectors(dfATTACK1_RANGE_X, dfATTACK1_RANGE_Y, ptrCharacter, &sessionIdForCharacterOnDamage))
 	{
-		packetBuf.ClearBuffer();
-		TcpFighterMessage::MakePacketDamage(packetBuf, ptrCharacter->characterID, damagedCharacter->characterID, damagedCharacter->hp -= dfATTACK1_DAMAGE);
-		SendPacketToSectorAround(damagedCharacter, packetBuf, true);
+		ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
+		return true;
 	}
+	//Sleep(60000);
 	ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
-
+	
+	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	if (!mCharacterManager.FindCharacter(sessionIdForCharacterOnDamage, &ptrCharacterOnDamage))
+	{
+		ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+		return true;
+	}
+	AcquireSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
+	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	packetBuf.ClearBuffer();
+	TcpFighterMessage::MakePacketDamage(packetBuf, characterID, ptrCharacterOnDamage->characterID, ptrCharacterOnDamage->hp -= dfATTACK1_DAMAGE);
+	SendPacketToSectorAround(ptrCharacterOnDamage, packetBuf, true);
+	ReleaseSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
 	return true;
 }
 
@@ -915,20 +956,27 @@ bool MmoTcpFighterServer::ProcessPacketAttack2(SESSIONID sessionID, Serializatio
 	BYTE stop2Dir;
 	WORD clientXpos;
 	WORD clientYpos;
+
 	PCharacterInfo ptrCharacter;
+	CHARACTERID characterID;
+
+	PCharacterInfo ptrCharacterOnDamage;
+	SESSIONID sessionIdForCharacterOnDamage;
 
 	refRecvPacket >> stop2Dir >> clientXpos >> clientYpos;
 	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
 	mCharacterManager.FindCharacter(sessionID, &ptrCharacter);
 	AcquireSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	characterID = ptrCharacter->characterID;
+
 	if (abs(ptrCharacter->xPos - clientXpos) > dfERROR_RANGE
 		|| abs(ptrCharacter->yPos - clientYpos) > dfERROR_RANGE)
 	{
 		clientXpos = ptrCharacter->xPos;
 		clientYpos = ptrCharacter->yPos;
 
-		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, ptrCharacter->characterID, clientXpos, clientYpos);
+		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, characterID, clientXpos, clientYpos);
 		SendPacketToSectorAround(ptrCharacter, packetBuf, true);
 		packetBuf.ClearBuffer();
 	}
@@ -940,18 +988,28 @@ bool MmoTcpFighterServer::ProcessPacketAttack2(SESSIONID sessionID, Serializatio
 
 	ptrCharacter->stop2Dir = stop2Dir;
 
-	TcpFighterMessage::MakePacketAttack2(packetBuf, ptrCharacter->characterID, stop2Dir, clientXpos, clientYpos);
+	TcpFighterMessage::MakePacketAttack2(packetBuf, characterID, stop2Dir, clientXpos, clientYpos);
 	SendPacketToSectorAround(ptrCharacter, packetBuf, false);
 
-	CharacterInfo* damagedCharacter;
-	if (SearchCollisionOnSectors(dfATTACK2_RANGE_X, dfATTACK2_RANGE_Y, ptrCharacter, &damagedCharacter))
+	if (!SearchCollisionOnSectors(dfATTACK2_RANGE_X, dfATTACK2_RANGE_Y, ptrCharacter, &sessionIdForCharacterOnDamage))
 	{
-		packetBuf.ClearBuffer();
-		TcpFighterMessage::MakePacketDamage(packetBuf, ptrCharacter->characterID, damagedCharacter->characterID, damagedCharacter->hp -= dfATTACK2_DAMAGE);
-		SendPacketToSectorAround(damagedCharacter, packetBuf, true);
+		ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
+		return true;
 	}
 	ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
-
+	
+	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	if (!mCharacterManager.FindCharacter(sessionIdForCharacterOnDamage, &ptrCharacterOnDamage))
+	{
+		ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+		return true;
+	}
+	AcquireSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
+	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	packetBuf.ClearBuffer();
+	TcpFighterMessage::MakePacketDamage(packetBuf, characterID, ptrCharacterOnDamage->characterID, ptrCharacterOnDamage->hp -= dfATTACK2_DAMAGE);
+	SendPacketToSectorAround(ptrCharacterOnDamage, packetBuf, true);
+	ReleaseSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
 	return true;
 }
 
@@ -961,20 +1019,27 @@ bool MmoTcpFighterServer::ProcessPacketAttack3(SESSIONID sessionID, Serializatio
 	BYTE stop2Dir;
 	WORD clientXpos;
 	WORD clientYpos;
+
 	PCharacterInfo ptrCharacter;
+	CHARACTERID characterID;
+
+	PCharacterInfo ptrCharacterOnDamage;
+	SESSIONID sessionIdForCharacterOnDamage;
 
 	refRecvPacket >> stop2Dir >> clientXpos >> clientYpos;
 	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
 	mCharacterManager.FindCharacter(sessionID, &ptrCharacter);
 	AcquireSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	characterID = ptrCharacter->characterID;
+
 	if (abs(ptrCharacter->xPos - clientXpos) > dfERROR_RANGE
 		|| abs(ptrCharacter->yPos - clientYpos) > dfERROR_RANGE)
 	{
 		clientXpos = ptrCharacter->xPos;
 		clientYpos = ptrCharacter->yPos;
 
-		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, ptrCharacter->characterID, clientXpos, clientYpos);
+		TcpFighterMessage::MakePacketSyncXYPos(packetBuf, characterID, clientXpos, clientYpos);
 		SendPacketToSectorAround(ptrCharacter, packetBuf, true);
 		packetBuf.ClearBuffer();
 	}
@@ -986,25 +1051,28 @@ bool MmoTcpFighterServer::ProcessPacketAttack3(SESSIONID sessionID, Serializatio
 
 	ptrCharacter->stop2Dir = stop2Dir;
 
-	TcpFighterMessage::MakePacketAttack3(packetBuf, ptrCharacter->characterID, stop2Dir, clientXpos, clientYpos);
+	TcpFighterMessage::MakePacketAttack3(packetBuf, characterID, stop2Dir, clientXpos, clientYpos);
 	SendPacketToSectorAround(ptrCharacter, packetBuf, false);
 
-	CharacterInfo* damagedCharacter;
-	if (SearchCollisionOnSectors(dfATTACK3_RANGE_X, dfATTACK3_RANGE_Y, ptrCharacter, &damagedCharacter))
+	if (!SearchCollisionOnSectors(dfATTACK3_RANGE_X, dfATTACK3_RANGE_Y, ptrCharacter, &sessionIdForCharacterOnDamage))
 	{
-		Sleep(60000);
-		int aaa = 3000;
-		while (aaa--)
-		{
-			YieldProcessor();
-		}
-		Sleep(60000);
-		packetBuf.ClearBuffer();
-		TcpFighterMessage::MakePacketDamage(packetBuf, ptrCharacter->characterID, damagedCharacter->characterID, damagedCharacter->hp -= dfATTACK3_DAMAGE);
-		SendPacketToSectorAround(damagedCharacter, packetBuf, true);
+		ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
+		return true;
 	}
 	ReleaseSRWLockExclusive(&ptrCharacter->srwCharacterLock);
 
+	AcquireSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	if (!mCharacterManager.FindCharacter(sessionIdForCharacterOnDamage, &ptrCharacterOnDamage))
+	{
+		ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+		return true;
+	}
+	AcquireSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
+	ReleaseSRWLockShared(mCharacterManager.GetCharacterContainerLock());
+	packetBuf.ClearBuffer();
+	TcpFighterMessage::MakePacketDamage(packetBuf, characterID, ptrCharacterOnDamage->characterID, ptrCharacterOnDamage->hp -= dfATTACK3_DAMAGE);
+	SendPacketToSectorAround(ptrCharacterOnDamage, packetBuf, true);
+	ReleaseSRWLockExclusive(&ptrCharacterOnDamage->srwCharacterLock);
 	return true;
 }
 
